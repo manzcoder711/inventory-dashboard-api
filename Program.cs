@@ -12,7 +12,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngularDev", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(
+                  "http://localhost:4200",
+                  "https://happy-pond-0aab59f00.3.azurestaticapps.net")
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
