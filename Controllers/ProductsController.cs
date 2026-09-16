@@ -1,6 +1,8 @@
+using System.Linq.Expressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using InventoryApi.Data;
+using InventoryApi.DTOs;
 using InventoryApi.Models;
 
 namespace InventoryApi.Controllers;
@@ -11,21 +13,43 @@ public class ProductsController : ControllerBase
 {
     private readonly InventoryDbContext _context;
 
+    private static readonly Expression<Func<Product, ProductResponse>> ProjectToResponse = p => new ProductResponse
+    {
+        Id = p.Id,
+        Name = p.Name,
+        Description = p.Description,
+        Sku = p.Sku,
+        Price = p.Price,
+        QuantityInStock = p.QuantityInStock,
+        Category = p.Category,
+        CreatedAt = p.CreatedAt,
+        UpdatedAt = p.UpdatedAt,
+    };
+
     public ProductsController(InventoryDbContext context)
     {
         _context = context;
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
+    public async Task<ActionResult<IEnumerable<ProductResponse>>> GetProducts(CancellationToken ct)
     {
-        return await _context.Products.AsNoTracking().ToListAsync();
+        var products = await _context.Products
+            .AsNoTracking()
+            .Select(ProjectToResponse)
+            .ToListAsync(ct);
+
+        return products;
     }
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<Product>> GetProduct(int id)
+    public async Task<ActionResult<ProductResponse>> GetProduct(int id, CancellationToken ct)
     {
-        var product = await _context.Products.FindAsync(id);
+        var product = await _context.Products
+            .AsNoTracking()
+            .Where(p => p.Id == id)
+            .Select(ProjectToResponse)
+            .FirstOrDefaultAsync(ct);
 
         if (product == null)
         {
@@ -36,56 +60,71 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<Product>> CreateProduct(Product product)
+    public async Task<ActionResult<ProductResponse>> CreateProduct(CreateProductRequest request, CancellationToken ct)
     {
-        product.Id = 0;
-        product.CreatedAt = DateTime.UtcNow;
-        product.UpdatedAt = null;
+        var product = new Product
+        {
+            Name = request.Name,
+            Description = request.Description,
+            Sku = request.Sku,
+            Price = request.Price,
+            QuantityInStock = request.QuantityInStock,
+            Category = request.Category,
+            CreatedAt = DateTime.UtcNow,
+        };
 
         _context.Products.Add(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(ct);
 
-        return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
+        var response = new ProductResponse
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Description = product.Description,
+            Sku = product.Sku,
+            Price = product.Price,
+            QuantityInStock = product.QuantityInStock,
+            Category = product.Category,
+            CreatedAt = product.CreatedAt,
+            UpdatedAt = product.UpdatedAt,
+        };
+
+        return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, response);
     }
 
     [HttpPut("{id:int}")]
-    public async Task<IActionResult> UpdateProduct(int id, Product product)
+    public async Task<IActionResult> UpdateProduct(int id, UpdateProductRequest request, CancellationToken ct)
     {
-        if (id != product.Id)
-        {
-            return BadRequest();
-        }
-
-        var existing = await _context.Products.FindAsync(id);
+        var existing = await _context.Products.FindAsync(new object?[] { id }, ct);
         if (existing == null)
         {
             return NotFound();
         }
 
-        existing.Name = product.Name;
-        existing.Description = product.Description;
-        existing.Sku = product.Sku;
-        existing.Price = product.Price;
-        existing.QuantityInStock = product.QuantityInStock;
-        existing.Category = product.Category;
+        existing.Name = request.Name;
+        existing.Description = request.Description;
+        existing.Sku = request.Sku;
+        existing.Price = request.Price;
+        existing.QuantityInStock = request.QuantityInStock;
+        existing.Category = request.Category;
         existing.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(ct);
 
         return NoContent();
     }
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> DeleteProduct(int id)
+    public async Task<IActionResult> DeleteProduct(int id, CancellationToken ct)
     {
-        var product = await _context.Products.FindAsync(id);
+        var product = await _context.Products.FindAsync(new object?[] { id }, ct);
         if (product == null)
         {
             return NotFound();
         }
 
         _context.Products.Remove(product);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(ct);
 
         return NoContent();
     }
