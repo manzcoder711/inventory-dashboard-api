@@ -1,9 +1,6 @@
-using System.Linq.Expressions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using InventoryApi.Data;
 using InventoryApi.DTOs;
-using InventoryApi.Models;
+using InventoryApi.Services;
 
 namespace InventoryApi.Controllers;
 
@@ -11,121 +8,44 @@ namespace InventoryApi.Controllers;
 [Route("api/[controller]")]
 public class ProductsController : ControllerBase
 {
-    private readonly InventoryDbContext _context;
+    private readonly IProductService _productService;
 
-    private static readonly Expression<Func<Product, ProductResponse>> ProjectToResponse = p => new ProductResponse
+    public ProductsController(IProductService productService)
     {
-        Id = p.Id,
-        Name = p.Name,
-        Description = p.Description,
-        Sku = p.Sku,
-        Price = p.Price,
-        QuantityInStock = p.QuantityInStock,
-        Category = p.Category,
-        CreatedAt = p.CreatedAt,
-        UpdatedAt = p.UpdatedAt,
-    };
-
-    public ProductsController(InventoryDbContext context)
-    {
-        _context = context;
+        _productService = productService;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ProductResponse>>> GetProducts(CancellationToken ct)
     {
-        var products = await _context.Products
-            .AsNoTracking()
-            .Select(ProjectToResponse)
-            .ToListAsync(ct);
-
-        return products;
+        return await _productService.GetAllAsync(ct);
     }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<ProductResponse>> GetProduct(int id, CancellationToken ct)
     {
-        var product = await _context.Products
-            .AsNoTracking()
-            .Where(p => p.Id == id)
-            .Select(ProjectToResponse)
-            .FirstOrDefaultAsync(ct);
-
-        if (product == null)
-        {
-            return NotFound();
-        }
-
-        return product;
+        var product = await _productService.GetByIdAsync(id, ct);
+        return product is null ? NotFound() : product;
     }
 
     [HttpPost]
     public async Task<ActionResult<ProductResponse>> CreateProduct(CreateProductRequest request, CancellationToken ct)
     {
-        var product = new Product
-        {
-            Name = request.Name,
-            Description = request.Description,
-            Sku = request.Sku,
-            Price = request.Price,
-            QuantityInStock = request.QuantityInStock,
-            Category = request.Category,
-            CreatedAt = DateTime.UtcNow,
-        };
-
-        _context.Products.Add(product);
-        await _context.SaveChangesAsync(ct);
-
-        var response = new ProductResponse
-        {
-            Id = product.Id,
-            Name = product.Name,
-            Description = product.Description,
-            Sku = product.Sku,
-            Price = product.Price,
-            QuantityInStock = product.QuantityInStock,
-            Category = product.Category,
-            CreatedAt = product.CreatedAt,
-            UpdatedAt = product.UpdatedAt,
-        };
-
-        return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, response);
+        var response = await _productService.CreateAsync(request, ct);
+        return CreatedAtAction(nameof(GetProduct), new { id = response.Id }, response);
     }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateProduct(int id, UpdateProductRequest request, CancellationToken ct)
     {
-        var existing = await _context.Products.FindAsync(new object?[] { id }, ct);
-        if (existing == null)
-        {
-            return NotFound();
-        }
-
-        existing.Name = request.Name;
-        existing.Description = request.Description;
-        existing.Sku = request.Sku;
-        existing.Price = request.Price;
-        existing.QuantityInStock = request.QuantityInStock;
-        existing.Category = request.Category;
-        existing.UpdatedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync(ct);
-
-        return NoContent();
+        var updated = await _productService.UpdateAsync(id, request, ct);
+        return updated ? NoContent() : NotFound();
     }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteProduct(int id, CancellationToken ct)
     {
-        var product = await _context.Products.FindAsync(new object?[] { id }, ct);
-        if (product == null)
-        {
-            return NotFound();
-        }
-
-        _context.Products.Remove(product);
-        await _context.SaveChangesAsync(ct);
-
-        return NoContent();
+        var deleted = await _productService.DeleteAsync(id, ct);
+        return deleted ? NoContent() : NotFound();
     }
 }

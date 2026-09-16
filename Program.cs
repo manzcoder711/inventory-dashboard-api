@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using InventoryApi.Data;
 using InventoryApi.Middleware;
+using InventoryApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,8 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddDbContext<InventoryDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("InventoryDb")));
+
+builder.Services.AddScoped<IProductService, ProductService>();
 
 var app = builder.Build();
 
