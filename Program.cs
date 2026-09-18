@@ -30,7 +30,12 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddDbContext<InventoryDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("InventoryDb")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("InventoryDb"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null)));
 
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -58,6 +63,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var context = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
+        var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
+        DemoDataSeeder.SeedDemoUser(context, passwordHasher);
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Failed to seed demo user at startup - will retry on next restart.");
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
