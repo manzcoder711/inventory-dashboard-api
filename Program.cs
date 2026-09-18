@@ -71,11 +71,12 @@ using (var scope = app.Services.CreateScope())
         var context = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
         DemoDataSeeder.SeedDemoUser(context, passwordHasher);
+        ProductDataSeeder.SeedProducts(context);
     }
     catch (Exception ex)
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogWarning(ex, "Failed to seed demo user at startup - will retry on next restart.");
+        logger.LogWarning(ex, "Failed to seed demo data at startup - will retry on next restart.");
     }
 }
 
