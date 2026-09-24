@@ -33,15 +33,27 @@ public class ProductsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ProductResponse>> CreateProduct(CreateProductRequest request, CancellationToken ct)
     {
-        var response = await _productService.CreateAsync(request, ct);
-        return CreatedAtAction(nameof(GetProduct), new { id = response.Id }, response);
+        var (result, response) = await _productService.CreateAsync(request, ct);
+
+        if (result == ProductWriteResult.DuplicateSku)
+        {
+            return Conflict(new { message = $"SKU '{request.Sku}' is already in use." });
+        }
+
+        return CreatedAtAction(nameof(GetProduct), new { id = response!.Id }, response);
     }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateProduct(int id, UpdateProductRequest request, CancellationToken ct)
     {
-        var updated = await _productService.UpdateAsync(id, request, ct);
-        return updated ? NoContent() : NotFound();
+        var result = await _productService.UpdateAsync(id, request, ct);
+
+        return result switch
+        {
+            ProductWriteResult.NotFound => NotFound(),
+            ProductWriteResult.DuplicateSku => Conflict(new { message = $"SKU '{request.Sku}' is already in use." }),
+            _ => NoContent(),
+        };
     }
 
     [HttpDelete("{id:int}")]

@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using InventoryApi.Data;
 using InventoryApi.DTOs;
@@ -47,8 +48,14 @@ public class ProductService : IProductService
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<ProductResponse> CreateAsync(CreateProductRequest request, CancellationToken ct)
+    public async Task<(ProductWriteResult Result, ProductResponse? Product)> CreateAsync(CreateProductRequest request, CancellationToken ct)
     {
+        var skuInUse = await _context.Products.AnyAsync(p => p.Sku == request.Sku, ct);
+        if (skuInUse)
+        {
+            return (ProductWriteResult.DuplicateSku, null);
+        }
+
         var product = new Product
         {
             Name = request.Name,
@@ -61,11 +68,20 @@ public class ProductService : IProductService
         };
 
         _context.Products.Add(product);
-        await _context.SaveChangesAsync(ct);
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsDuplicateSkuViolation(ex))
+        {
+            // Another request claimed this SKU between our check and the insert.
+            _logger.LogWarning("Duplicate SKU {Sku} rejected by the unique index on create", request.Sku);
+            return (ProductWriteResult.DuplicateSku, null);
+        }
 
         _logger.LogInformation("Product {ProductId} created with SKU {Sku}", product.Id, product.Sku);
 
-        return new ProductResponse
+        return (ProductWriteResult.Success, new ProductResponse
         {
             Id = product.Id,
             Name = product.Name,
@@ -76,15 +92,21 @@ public class ProductService : IProductService
             Category = product.Category,
             CreatedAt = product.CreatedAt,
             UpdatedAt = product.UpdatedAt,
-        };
+        });
     }
 
-    public async Task<bool> UpdateAsync(int id, UpdateProductRequest request, CancellationToken ct)
+    public async Task<ProductWriteResult> UpdateAsync(int id, UpdateProductRequest request, CancellationToken ct)
     {
         var existing = await _context.Products.FindAsync(new object?[] { id }, ct);
         if (existing == null)
         {
-            return false;
+            return ProductWriteResult.NotFound;
+        }
+
+        var skuInUse = await _context.Products.AnyAsync(p => p.Sku == request.Sku && p.Id != id, ct);
+        if (skuInUse)
+        {
+            return ProductWriteResult.DuplicateSku;
         }
 
         existing.Name = request.Name;
@@ -95,11 +117,19 @@ public class ProductService : IProductService
         existing.Category = request.Category;
         existing.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(ct);
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsDuplicateSkuViolation(ex))
+        {
+            _logger.LogWarning("Duplicate SKU {Sku} rejected by the unique index on update of product {ProductId}", request.Sku, id);
+            return ProductWriteResult.DuplicateSku;
+        }
 
         _logger.LogInformation("Product {ProductId} updated", id);
 
-        return true;
+        return ProductWriteResult.Success;
     }
 
     public async Task<bool> DeleteAsync(int id, CancellationToken ct)
@@ -117,4 +147,9 @@ public class ProductService : IProductService
 
         return true;
     }
+
+    // 2601 = duplicate key in a unique index, 2627 = unique constraint violation.
+    private static bool IsDuplicateSkuViolation(DbUpdateException ex) =>
+        ex.InnerException is SqlException { Number: 2601 or 2627 } sqlEx
+        && sqlEx.Message.Contains("IX_Products_Sku");
 }
