@@ -23,4 +23,13 @@
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
   </ItemGroup>
 
+  <!-- The test project lives in a subfolder of this one; without this, the SDK globs its
+       .cs files into the API build and its .json files into the published output. -->
+  <ItemGroup>
+    <Compile Remove="InventoryApi.Tests/**" />
+    <Content Remove="InventoryApi.Tests/**" />
+    <None Remove="InventoryApi.Tests/**" />
+    <EmbeddedResource Remove="InventoryApi.Tests/**" />
+  </ItemGroup>
+
 </Project>
