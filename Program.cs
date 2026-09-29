@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -62,6 +63,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// On Azure App Service every request arrives through Azure's front end, so without this the
+// app sees the front end's IP instead of the visitor's (and http instead of https).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // The front end has no fixed address to allow-list, so accept the headers from any proxy.
+    // Safe because the app is only reachable through that front end, and ForwardLimit (default 1)
+    // only takes the last X-Forwarded-For entry - the one Azure appended - so a value the
+    // client sent itself is ignored.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+builder.Services.AddAuthRateLimiting();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -86,11 +103,27 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// First, so everything after it (rate limiting, logging, HTTPS redirection) sees the real client.
+app.UseForwardedHeaders();
+
 app.UseExceptionHandler();
+
+if (!app.Environment.IsDevelopment())
+{
+    // Tells browsers to use HTTPS only for this host; sent on HTTPS responses only, which
+    // UseForwardedHeaders above makes the app recognise on Azure.
+    app.UseHsts();
+}
+
+app.UseApiSecurityHeaders();
 
 app.UseHttpsRedirection();
 
 app.UseCors("AllowAngularDev");
+
+// After CORS, so a 429 still carries the CORS headers - otherwise the browser hides the
+// status from the frontend and it looks like a network failure.
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
