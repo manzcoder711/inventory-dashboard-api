@@ -79,6 +79,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 builder.Services.AddAuthRateLimiting();
 
+// Deliberately no database check: /health must answer instantly even while the serverless
+// database is paused, so it only proves the app itself is up.
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -129,5 +133,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();
