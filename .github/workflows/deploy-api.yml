@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+  # PRs (including Dependabot's) get built and tested, but never deployed - see the `if` below.
+  pull_request:
+    branches:
+      - main
 
 env:
   AZURE_WEBAPP_NAME: inventory-api-forIN
@@ -26,10 +30,16 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
+      # A failing test fails the job here, so Publish and Deploy below never run.
+      - name: Test
+        run: dotnet test InventoryApi.Tests --configuration Release
+
       - name: Publish
+        if: github.event_name == 'push'
         run: dotnet publish --configuration Release --no-build --output ./publish
 
       - name: Deploy to Azure App Service
+        if: github.event_name == 'push'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
