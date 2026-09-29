@@ -66,7 +66,7 @@ public sealed class ProductServiceTests : IDisposable
 
         await using var context = _db.CreateContext();
         var saved = await context.Products.SingleAsync();
-        Assert.Equal("NEW-001", saved.Sku);
+        Assert.Equal("DELIBERATELY-WRONG", saved.Sku);
         Assert.Equal(19.99m, saved.Price);
     }
 
