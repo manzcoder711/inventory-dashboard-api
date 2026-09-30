@@ -8,6 +8,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Microsoft.AspNetCore.OpenApi 10.x requires Microsoft.OpenApi below 3.0, and the build
+      # (warnings as errors) rejects the mismatch. Remove once ASP.NET Core supports 3.x.
+      - dependency-name: "Microsoft.OpenApi"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
