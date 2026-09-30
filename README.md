@@ -147,6 +147,11 @@ $login = Invoke-RestMethod http://localhost:5298/api/auth/login -Method Post -Co
 Invoke-RestMethod http://localhost:5298/api/products -Headers @{ Authorization = "Bearer $($login.token)" }
 ```
 
+> **Not on Windows, or no LocalDB?** LocalDB is the only setup these steps were tested with. Any
+> SQL Server you can reach should work: put its connection string in step 2 and the rest is
+> identical. (Running SQL Server in Docker is the usual choice on macOS and Linux; that route
+> hasn't been tested here.)
+
 To use the Angular frontend against it, follow the steps in the
 [frontend repo](https://github.com/manzcoder711/inventory-dashboard-frontend); its development build
 already points at `http://localhost:5298`.
